@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+		http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<parent>
+		<groupId>org.scijava</groupId>
+		<artifactId>pom-scijava</artifactId>
+		<version>29.0.0-beta-1</version>
+		<relativePath />
+	</parent>
+	<repositories>
+    <repository>
+      <id>repository</id>
+      <name>Example Repository</name>
+      <url>file://C:/Users/willemsejj/.m2</url>
+    </repository>
+  </repositories>
+	
+	<groupId>LeidenUniv.Omero</groupId>
+	<artifactId>LeidenUniv_OMERO</artifactId>
+	<version>0.1.1-SNAPSHOT</version>
+
+	<name>LeidenUniv/Omero</name>
+	<description>Omero project from LeidenUniv as ImageJ 1.x plugin.</description>
+	<url>http://mycompany.com/imagej/process-pixels/</url>
+	<inceptionYear>2019</inceptionYear>
+	<organization>
+		<name>My Company</name>
+		<url>http://mycompany.com/</url>
+	</organization>
+	<licenses>
+		<license>
+			<name>Simplified BSD License</name>
+			<distribution>repo</distribution>
+		</license>
+	</licenses>
+
+	<developers>
+		<developer>
+			<id>Willemsejj</id>
+			<name>Joost Willemse</name>
+			<url>https://imagej.net/User:Willemsejj</url>
+			<roles>
+				<role>lead</role>
+				<role>developer</role>
+				<role>debugger</role>
+				<role>reviewer</role>
+				<role>support</role>
+				<role>maintainer</role>
+			</roles>
+		</developer>
+	</developers>
+	<contributors>
+		<contributor>
+			<name>Joost Willemse</name>
+			<url>https://imagej.net/User:Willemsejj</url>
+			<roles><role>founder</role></roles>
+			<properties><id>dscho</id></properties>
+		</contributor>
+	</contributors>
+
+	<mailingLists>
+		<mailingList>
+			<name>Image.sc Forum</name>
+			<archive>https://forum.image.sc/</archive>
+		</mailingList>
+	</mailingLists>
+
+	<scm>
+		<connection>scm:git:git://github.com/imagej/example-legacy-plugin</connection>
+		<developerConnection>scm:git:git@github.com:imagej/example-legacy-plugin</developerConnection>
+		<tag>HEAD</tag>
+		<url>https://github.com/imagej/example-legacy-plugin</url>
+	</scm>
+	<issueManagement>
+		<system>GitHub Issues</system>
+		<url>https://github.com/imagej/example-legacy-plugin/issues</url>
+	</issueManagement>
+	<ciManagement>
+		<system>None</system>
+	</ciManagement>
+
+	<properties>
+		<package-name>LeidenUniv.Omero</package-name>
+		<main-class>LeidenUniv.Omero.Process_Pixels</main-class>
+		<license.licenseName>bsd_2</license.licenseName>
+		<license.copyrightOwners>My Company, Inc.</license.copyrightOwners>
+	</properties>
+
+	<dependencies>
+		<dependency>
+			<groupId>org.scijava</groupId>
+			<artifactId>pom-scijava</artifactId>
+			<version>29.0.0-beta-2</version>
+			<type>pom</type>
+		</dependency>
+	<!-- https://mvnrepository.com/artifact/net.imagej/imagej-omero -->
+		<dependency>
+			<groupId>net.imagej</groupId>
+			<artifactId>pom-imagej</artifactId>
+			<version>17.0.0</version>
+			<type>pom</type>
+		</dependency>
+		<dependency>
+			<groupId>repository.io.scif</groupId>
+			<artifactId>scifio</artifactId>
+			<version>0.37.3</version>
+			<scope>provided</scope>
+		</dependency>
+	</dependencies>
+		
+</project>
