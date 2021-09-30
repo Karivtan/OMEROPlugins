@@ -22,6 +22,7 @@
  */
 package LeidenUniv.Omero;
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -44,6 +45,15 @@ import ij.gui.GenericDialog;
 import ij.gui.DialogListener;
 import ij.measure.ResultsTable;
 import ij.plugin.PlugIn;
+import loci.formats.FormatException;
+import loci.plugins.BF;
+import loci.plugins.LociImporter;
+import loci.plugins.in.DisplayHandler;
+import loci.plugins.in.ImagePlusReader;
+import loci.plugins.in.ImportProcess;
+import loci.plugins.in.ImporterOptions;
+import loci.plugins.in.ImporterPrompter;
+import loci.plugins.util.WindowTools;
 import net.imagej.omero.*;
 import net.imagej.Dataset;
 import net.imagej.ImageJ;
@@ -97,7 +107,7 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
      */
     
     @SuppressWarnings("rawtypes")
-	private ImagePlus openImagePlus(Long imageId, ImageData data)
+	private ImagePlus openImagePlus(Long imageId, ImageData data) //should be able to construct a general class for this!
         throws Exception
     {
         OMEROLocation ol = new OMEROLocation(HOST,PORT,Username,Password);
@@ -106,12 +116,71 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
 		OMEROService dos = context.service(OMEROService.class);
 		OMEROSession os = dos.createSession(ol);
 		client cl = os.getClient();
+		
+		String credentials ="location=[OMERO] open=[omero:server=";
+		credentials += cl.getProperty("omero.host");
+		credentials +="\nuser=";
+		credentials +=Username;
+		credentials +="\npass=";
+		credentials +=Password;
+		credentials +="\ngroupID=";
+		credentials +=data.getGroupId();
+		credentials +="\niid=";
+		credentials +=imageId;
+		credentials +="]";
+		credentials +=" windowless=true ";
+		LociImporter lc = new LociImporter();
+		// uses a display handler to show the file. can potentially be done without that by recoding the importer here
+		/*
+		 *  
+		 *  
+		 *  /
+		 */
+		ImporterOptions options = null;
+		ImagePlus[] imps = null;
+		try {
+		  	BF.debug("parse core options");
+		  	options = new ImporterOptions();
+		    options.loadOptions();
+		    options.parseArg(credentials);
+		    options.checkObsoleteOptions();
+        
+   			ImportProcess process = new ImportProcess(options);
+      		BF.debug("display option dialogs");
+      		new ImporterPrompter(process);
+      		process.execute();
+      		BF.debug("display metadata");
+      		DisplayHandler displayHandler = new DisplayHandler(process);
+      		displayHandler.displayOriginalMetadata();
+      		displayHandler.displayOMEXML();
+      		BF.debug("read pixel data");
+      		ImagePlusReader reader = new ImagePlusReader(process);
+      		if (options.isViewNone()) return null;
+      	    if (!options.isQuiet()) reader.addStatusListener(displayHandler);
+      	    imps = reader.openImagePlus();
+      	    if (!process.getOptions().isVirtual()) process.getReader().close();
+    	} catch (FormatException exc) {
+  			boolean quiet = options == null ? false : options.isQuiet();
+  			WindowTools.reportException(exc, quiet,
+    		"Sorry, there was a problem during import.");
+    	} catch (IOException exc) {
+  			boolean quiet = options == null ? false : options.isQuiet();
+  			WindowTools.reportException(exc, quiet,
+    		"Sorry, there was an I/O problem during import.");
+		}
+		 //*/
+		//lc.run(credentials); // this works!
+		ImagePlus imp = imps[0];
+		imp.hide();
+        return imp;
+        
+        /*
         Dataset d = dos.downloadImage(cl,imageId);
         ImgPlus implu=d.getImgPlus();
         @SuppressWarnings("unchecked")
 		ImagePlus imp = ImageJFunctions.wrap(implu,"My desired imageplus");
         //imp.show();
-        return imp;
+        return imp;*/
     }
 
     /**
