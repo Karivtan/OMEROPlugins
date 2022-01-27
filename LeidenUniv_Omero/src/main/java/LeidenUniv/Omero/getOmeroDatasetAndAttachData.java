@@ -32,7 +32,9 @@ import loci.plugins.in.ImporterPrompter;
 import loci.plugins.util.WindowTools;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -40,6 +42,8 @@ import java.util.Arrays;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.Iterator;
+
+import javax.activation.MimeType;
 import javax.swing.JPasswordField;
 import javax.swing.JTextField;
 import java.awt.GridBagConstraints;
@@ -53,6 +57,7 @@ import ij.gui.GenericDialog;
 import ij.gui.Roi;
 import ij.gui.DialogListener;
 import ij.measure.ResultsTable;
+import ij.plugin.PlugIn;
 import ij.plugin.frame.RoiManager;
 import ij.process.FloatPolygon;
 import net.imagej.omero.OMEROLocation;
@@ -64,6 +69,7 @@ import net.imagej.ImgPlus;
 import omero.gateway.Gateway;
 import omero.gateway.SecurityContext;
 import omero.gateway.facility.BrowseFacility;
+import omero.gateway.facility.DataManagerFacility;
 import omero.gateway.facility.ROIFacility;
 import omero.gateway.facility.TablesFacility;
 import omero.gateway.LoginCredentials;
@@ -80,9 +86,20 @@ import omero.gateway.model.GroupData;
 import omero.gateway.model.ExperimenterData;
 import omero.gateway.exception.DSAccessException;
 import omero.gateway.exception.DSOutOfServiceException;
+import omero.ServerError;
 import omero.client;
+import omero.api.RawFileStorePrx;
 import omero.log.NullLogger;
 import omero.log.SimpleLogger;
+import omero.model.ChecksumAlgorithm;
+import omero.model.ChecksumAlgorithmI;
+import omero.model.FileAnnotation;
+import omero.model.FileAnnotationI;
+import omero.model.ImageAnnotationLink;
+import omero.model.ImageAnnotationLinkI;
+import omero.model.OriginalFile;
+import omero.model.OriginalFileI;
+import omero.model.enums.ChecksumAlgorithmSHA1160;
 import io.scif.config.SCIFIOConfig;
 import io.scif.config.SCIFIOConfig.ImgMode;
 import io.scif.io.Location;
@@ -101,7 +118,7 @@ import net.imglib2.img.display.imagej.ImageJFunctions;
  * The purpose of the script is to be used in the Scripting Dialog
  * of Fiji (File > New > Script).
  */
-public class getOmeroDatasetAndAttachData implements DialogListener{
+public class getOmeroDatasetAndAttachData implements DialogListener, PlugIn{
 
     // Edit value
     private String Username = "";
@@ -507,14 +524,7 @@ public class getOmeroDatasetAndAttachData implements DialogListener{
         return images;
     }
 
-    /**
-     * Uploads the image to OMERO.
-     * 
-     * @param gateway The gateway
-     * @param path The path to the image to upload
-     * @return
-     * @throws Exception
-     */
+
 	public Collection<ImageData> getImageCollection(){
 		Collection<ImageData> images=null;
 		try {
@@ -982,6 +992,7 @@ public class getOmeroDatasetAndAttachData implements DialogListener{
        	}
     }
 	
+	
 	public Collection<ROIData> roiArrayToCollection(Roi[] rois){
 		/* we now have a ij.gui.Roi array which needs to be converted to a ROIData List
 		// a single ROIData contains a list of ShapeData which we can add
@@ -1010,8 +1021,84 @@ public class getOmeroDatasetAndAttachData implements DialogListener{
 		rds.add(rd);
 		return rds;
 	}
+	
+	protected void attachFile(File file, String description, String NAME_SPACE_TO_SET, String datatype, ImageData image) {
+		int INC = 262144;
+		try {
+			DataManagerFacility dm = gateway.getFacility(DataManagerFacility.class);
+			//create the original file object.
+			OriginalFile originalFile = new OriginalFileI();
+			originalFile.setName(omero.rtypes.rstring(file.getName()));
+			originalFile.setPath(omero.rtypes.rstring(file.getPath()));
+			originalFile.setSize(omero.rtypes.rlong(file.length()));
+			final ChecksumAlgorithm checksumAlgorithm = new ChecksumAlgorithmI();
+			checksumAlgorithm.setValue(omero.rtypes.rstring(ChecksumAlgorithmSHA1160.value));
+			originalFile.setHasher(checksumAlgorithm);
+			originalFile.setMimetype(omero.rtypes.rstring(datatype)); // or "application/octet-stream"
+			//Now we save the originalFile object
+			originalFile = (OriginalFile) dm.saveAndReturnObject(ctx, originalFile);
+			//Initialize the service to load the raw data
+			RawFileStorePrx rawFileStore = gateway.getRawFileService(ctx);
+			long pos = 0;
+			int rlen;
+			byte[] buf = new byte[INC];
+			ByteBuffer bbuf;
+			//Open file and read stream
+			try (FileInputStream stream = new FileInputStream(file)) {
+			    rawFileStore.setFileId(originalFile.getId().getValue());
+			    while ((rlen = stream.read(buf)) > 0) {
+			        rawFileStore.write(buf, pos, rlen);
+			        pos += rlen;
+			        bbuf = ByteBuffer.wrap(buf);
+			        bbuf.limit(rlen);
+			    }
+			    originalFile = rawFileStore.save();
+			} catch (ServerError e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			} finally {
+			   try {
+				rawFileStore.close();
+				} catch (ServerError e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			}
+			//now we have an original File in DB and raw data uploaded.
+			//We now need to link the Original file to the image using
+			//the File annotation object. That's the way to do it.
+			FileAnnotation fa = new FileAnnotationI();
+			fa.setFile(originalFile);
+			fa.setDescription(omero.rtypes.rstring(description)); // The description set above e.g. PointsModel
+			fa.setNs(omero.rtypes.rstring(NAME_SPACE_TO_SET)); // The name space you have set to identify the file annotation.
+
+			//save the file annotation.
+			fa = (FileAnnotation) dm.saveAndReturnObject(ctx, fa);
+
+			//now link the image and the annotation
+			ImageAnnotationLink link = new ImageAnnotationLinkI();
+			link.setChild(fa);
+			link.setParent(image.asImage());
+			//save the link back to the server.
+			link = (ImageAnnotationLink) dm.saveAndReturnObject(ctx, link);
+			// o attach to a Dataset use DatasetAnnotationLink;
+		} catch (ExecutionException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (DSOutOfServiceException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (DSAccessException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
 // used for testing when running the plugin stand alone
-    public static void main(String[] args) {
+    //public static void run main(String[] args) {
+	public void run (String args) {
     	//ImageJ imageJ = new ImageJ();
     	/*ImagePlus imp = IJ.openImage("http://imagej.nih.gov/ij/images/blobs.gif");
     	IJ.run(imp, "Convert to Mask", "");
@@ -1027,9 +1114,8 @@ public class getOmeroDatasetAndAttachData implements DialogListener{
 		IJ.log(""+Rois.length);*/
 		
     	getOmeroDatasetAndAttachData om = new getOmeroDatasetAndAttachData();
-    	
     	Collection<ImageData> images = om.getImageCollection(); // this gives the version error
-    	Long gid= om.gateway.getLoggedInUser().getGroupId();
+    	/*Long gid= om.gateway.getLoggedInUser().getGroupId();
         ExperimenterData user = om.gateway.getLoggedInUser();
         try {
 			Set<GroupData> lgd3 = om.gateway.getFacility(BrowseFacility.class).getAvailableGroups(om.ctx, user);
@@ -1045,11 +1131,14 @@ public class getOmeroDatasetAndAttachData implements DialogListener{
 		} catch (ExecutionException e1) {
 			// TODO Auto-generated catch block
 			e1.printStackTrace();
-		}
+		}*/
 
     	if (images!=null){
-        	Iterator<ImageData> image = images.iterator(); 
-        	 while (image.hasNext()) {
+        	Iterator<ImageData> image = images.iterator();
+        	ImageData data = image.next();
+        	File f = new File("f:/temp/Dots 0.tif");
+        	om.attachFile(f, "test", "imagedata", "image/tiff", data);
+        	 /*while (image.hasNext()) {
         		 ImageData data = image.next();
         		 try {
 	                	//om.attachRoisToImage(Rois,data,"test");
@@ -1064,7 +1153,7 @@ public class getOmeroDatasetAndAttachData implements DialogListener{
 	                 		IJ.log(t[i].toString());
 	                 	}
 	                }
-        	 }
+        	 }*/
     	}
     }
 }

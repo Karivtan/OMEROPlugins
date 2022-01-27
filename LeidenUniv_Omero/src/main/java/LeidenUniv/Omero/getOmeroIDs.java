@@ -21,30 +21,6 @@
  *------------------------------------------------------------------------------
  */
 package LeidenUniv.Omero;
-import java.io.File;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Arrays;
-import java.util.Set;
-import java.util.Iterator;
-import javax.swing.JPasswordField;
-import javax.swing.JTextField;
-import java.awt.GridBagConstraints;
-import java.awt.Window;
-import java.awt.Dimension;
-import java.awt.Toolkit;
-import java.awt.AWTEvent;
-import java.awt.Component;
-import java.awt.Choice;
-import ij.IJ;
-import ij.ImagePlus;
-import ij.WindowManager;
-import ij.gui.GenericDialog;
-import ij.gui.DialogListener;
-import ij.measure.ResultsTable;
-import ij.plugin.PlugIn;
 import loci.formats.FormatException;
 import loci.plugins.BF;
 import loci.plugins.LociImporter;
@@ -54,25 +30,80 @@ import loci.plugins.in.ImportProcess;
 import loci.plugins.in.ImporterOptions;
 import loci.plugins.in.ImporterPrompter;
 import loci.plugins.util.WindowTools;
-import net.imagej.omero.*;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Arrays;
+import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.Iterator;
+import javax.swing.JPasswordField;
+import javax.swing.JTextField;
+import java.awt.GridBagConstraints;
+import java.awt.geom.Point2D;
+import java.awt.AWTEvent;
+import java.awt.Component;
+import java.awt.Choice;
+import ij.IJ;
+import ij.ImagePlus;
+import ij.gui.GenericDialog;
+import ij.gui.Roi;
+import ij.gui.DialogListener;
+import ij.measure.ResultsTable;
+import ij.plugin.frame.RoiManager;
+import ij.process.FloatPolygon;
+import net.imagej.omero.DefaultOMEROService;
+import net.imagej.omero.OMEROLocation;
+import net.imagej.omero.OMEROService;
+import net.imagej.omero.OMEROSession;
+import net.imagej.patcher.LegacyInjector;
 import net.imagej.Dataset;
 import net.imagej.ImageJ;
 import net.imagej.ImgPlus;
 import omero.gateway.Gateway;
 import omero.gateway.SecurityContext;
 import omero.gateway.facility.BrowseFacility;
+import omero.gateway.facility.ROIFacility;
+import omero.gateway.facility.TablesFacility;
 import omero.gateway.LoginCredentials;
 import omero.gateway.model.ImageData;
+import omero.gateway.model.PolygonData;
+import omero.gateway.model.DataObject;
 import omero.gateway.model.DatasetData;
 import omero.gateway.model.ProjectData;
+import omero.gateway.model.ROIData;
+import omero.gateway.model.ShapeData;
+import omero.gateway.model.TableData;
+import omero.gateway.model.TableDataColumn;
 import omero.gateway.model.GroupData;
 import omero.gateway.model.ExperimenterData;
+import omero.gateway.model.FileData;
+import omero.gateway.exception.DSAccessException;
 import omero.gateway.exception.DSOutOfServiceException;
 import omero.client;
+import omero.api.ServiceFactoryPrx;
 import omero.log.NullLogger;
 import omero.log.SimpleLogger;
+import io.scif.config.SCIFIOConfig;
+import io.scif.config.SCIFIOConfig.ImgMode;
+import io.scif.io.Location;
+import io.scif.services.DatasetIOService;
+import io.scif.services.DefaultDatasetIOService;
 import org.scijava.Context;
+import org.scijava.io.location.AbstractLocation;
+import org.scijava.io.location.URILocation;
+
 import net.imglib2.img.display.imagej.ImageJFunctions;
+import omero.model.IObject;
+import ome.model.acquisition.Instrument;
+//import net.imagej.legacy.convert.roi.box.BoxWrapper;
+import ome.model.core.Image;
+import ome.model.core.OriginalFile;
+import ome.model.fs.Fileset;
 
 
 /**
@@ -80,13 +111,12 @@ import net.imglib2.img.display.imagej.ImageJFunctions;
  * The purpose of the script is to be used in the Scripting Dialog
  * of Fiji (File > New > Script).
  */
-public class Open_Omero_Dataset implements PlugIn, DialogListener{
+public class getOmeroIDs implements DialogListener{
 
-    // Edit value
+
+	// Edit value
     private String Username = "";
-    private static String HOST = "omero.services.universiteitleiden.nl";
-    //"omero.liacs.nl";
-    //"omeroweb.services.universiteitleiden.nl";
+    private static String HOST = "";
     private static int PORT = 4064;
     private String Password = "";
     private boolean SaveCred = true;
@@ -96,16 +126,17 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
 	private String [] gNames, gSortedNames;
 	private String [] pNames, pSortedNames;
 	private String [] uNames, uSortedNames;
-	private String [] sets, SortedSets;
+	private String [] sets, SortedSets; 
 	private long [] gIds, uIds;
 	private int prevgchoice, prevpchoice,schoice, prevuchoice, suchoice;
 	private Collection<ProjectData> pjd=null;
-	long [] dataSetIds=null;
+	private long [] dataSetIds=null;
 	private long dataChoice, cUid;
 	private Gateway gateway = null;
 	private Dataset d;
 	private Object[] dsda;
 	private Object[] groupsetarray;
+	
     /**
      * Open an image using the Bio-Formats importer.
      *
@@ -113,17 +144,19 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
      * @throws Exception
      */
     
-    @SuppressWarnings("rawtypes")
-	private ImagePlus openImagePlus(Long imageId, ImageData data) //should be able to construct a general class for this!
+    protected ImagePlus archiveImagePlus(Long imageId, ImageData data, Long gid)
         throws Exception
     {
-        OMEROLocation ol = new OMEROLocation(HOST,PORT,Username,Password);
+        OMEROLocation ol = new OMEROLocation(HOST,PORT,Username,Password); // causing conflict issues with omero update site and the downloadable jar from omero
 		ImageJ ij = new ImageJ();
 		Context context = ij.context();
-		OMEROService dos = context.service(OMEROService.class);
-		OMEROSession os = dos.createSession(ol);
+		OMEROService dos = context.service(OMEROService.class); // also not found
+		OMEROSession os = dos.createSession(ol);// Here we create a new session, but one should still exist based on the gateway connection previously made
+		//OMEROSession os = dos.session();
 		client cl = os.getClient();
-		
+        //d = dos.downloadImage(cl,imageId); //this now gives an error 14-10-2020 based on scifio 0.40.0 working with 0.37.3
+        // stopped working alltogether on 26-05-21
+        //caused by the fact that the string needs to be converted to an URILocation
 		String credentials ="location=[OMERO] open=[omero:server=";
 		credentials += cl.getProperty("omero.host");
 		credentials +="\nuser=";
@@ -131,7 +164,7 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
 		credentials +="\npass=";
 		credentials +=Password;
 		credentials +="\ngroupID=";
-		credentials +=data.getGroupId();
+		credentials +=gid;
 		credentials +="\niid=";
 		credentials +=imageId;
 		credentials +="]";
@@ -180,14 +213,6 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
 		ImagePlus imp = imps[0];
 		imp.hide();
         return imp;
-        
-        /*
-        Dataset d = dos.downloadImage(cl,imageId);
-        ImgPlus implu=d.getImgPlus();
-        @SuppressWarnings("unchecked")
-		ImagePlus imp = ImageJFunctions.wrap(implu,"My desired imageplus");
-        //imp.show();
-        return imp;*/
     }
 
     /**
@@ -203,6 +228,9 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
     	try{
     		ResultsTable prevChoices=ResultsTable.open(IJ.getDirectory("plugins")+"Leidenuniv/Omero/OmeroSettings.csv");
     		HOST=prevChoices.getStringValue("Host",0);
+    		if  (HOST==null){
+    			HOST="omero.services.universiteitleiden.nl";
+    		}
     		Username=prevChoices.getStringValue("Username",0);
     		PORT=Integer.parseInt(prevChoices.getStringValue("Port",0));
     		tf1 = new JTextField(HOST,25); //Host
@@ -214,6 +242,7 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
     		tf2 = new JTextField(15); //Port
     	}
     	IJ.log("\\Clear");
+    	
     	//Menu for login pop-up, to add host, and port so it can be used universily
 		GenericDialog userData = new GenericDialog("Fill in login information");
 		GridBagConstraints gb = new GridBagConstraints();
@@ -221,7 +250,7 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
         gb.anchor=GridBagConstraints.WEST;
         gb.insets.left=20;
         userData.addMessage("Host");
-        
+  
         userData.add(tf1, gb);
         userData.addMessage("");
         userData.addMessage("Username");
@@ -244,12 +273,6 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
         char[] ch = jp.getPassword();
         Password = new String(ch);
         SaveCred= userData.getNextBoolean();
-        credentials = new LoginCredentials(Username,Password,HOST,PORT);
-        SimpleLogger simpleLogger = new SimpleLogger();
-        //NullLogger simpleLogger = new NullLogger();
-        Gateway gateway = new Gateway(simpleLogger);
-        gateway.connect(credentials);
-        // Make an option for storing username, and host, and port
         if (SaveCred){
         	File f1 = new File(IJ.getDirectory("plugins")+"Leidenuniv");
 			if (!f1.exists()){
@@ -266,6 +289,15 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
 			choicetable.addValue("Port",PORT);
 			choicetable.saveAs(IJ.getDirectory("plugins")+"Leidenuniv/Omero/OmeroSettings.csv");
         }
+        //IJ.log("0");
+        credentials = new LoginCredentials(Username,Password,HOST,PORT);
+        SimpleLogger simpleLogger = new SimpleLogger();
+        //NullLogger nl = new NullLogger();
+        Gateway gateway = new Gateway(simpleLogger);
+        gateway.connect(credentials);
+        // Make an option for storing username, and host, and port
+        
+        //IJ.log("1");
         return gateway;
     }
 
@@ -276,8 +308,6 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
      * @return See above
      * @throws Exception
      */
-     
-    //private Collection<ImageData> getImages(Gateway gateway)
     private Collection<ImageData> getImages(Gateway gateway)
             throws Exception
     {
@@ -302,20 +332,9 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
 			gSortedNames[g]=(gda.getName());
 			gIds[g]=gda.getId();
         }
-        /*while (gIt.hasNext()){// to select groups
-        	GroupData gda=gIt.next();
-			gNames[g]=(gda.getName());
-			gSortedNames[g]=(gda.getName());
-			gIds[g]=gda.getId();
-			g++;
-        }*/
 		// read data of first group for initial menu
-        
-        
-		
 		GroupData grd2= (GroupData)groupsetarray[0];
 		Set<ExperimenterData> users = grd2.getExperimenters();
-        //IJ.log(""+users.size());
         uIds= new long[users.size()];
         if (users.size()<2) {
         	uNames = new String[] {"All"};
@@ -426,10 +445,6 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
         int uchoice = gd.getNextChoiceIndex();
         int pchoice = gd.getNextChoiceIndex();
         schoice = gd.getNextChoiceIndex();
-        
-        //IJ.log(""+gchoice+","+pchoice+","+schoice);
-
-        
         //after all the choice load the right images
 		pArr=pjd.toArray();
 		int puchoice;
@@ -440,7 +455,6 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
 		} else {
 			puchoice=0;
 		}
-		
 		if (uchoice>-1) {
 			String uString = uSortedNames[uchoice];
 			uuchoice = Arrays.asList(uNames).indexOf(uString);
@@ -450,8 +464,6 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
 		if (schoice==-1) {
 			schoice=0;
 		}
-		
-		
 		cP=(ProjectData)pArr[puchoice]; //indexoutofboundsexception
         dsd = cP.getDatasets();
          if (dsd.size()<1){
@@ -459,7 +471,6 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
         	return null;
         }
        	SetIterator = dsd.iterator();
-       	
        	dsda = dsd.toArray();
        	sets = new String[dsd.size()];
         long [] dataSetIds= new long [dsd.size()];
@@ -484,112 +495,9 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
         if (images.size()<1){
         	IJ.showMessage("This Dataset contains no Images");
         	return null;
-        }
+        } 
         return images;
     }
-    /*private Collection<ImageData> getImages(Gateway gateway)
-            throws Exception
-    {
-        browser = gateway.getFacility(BrowseFacility.class);
-        ExperimenterData user = gateway.getLoggedInUser();
-        List<GroupData> lgd = user.getGroups();
-		Iterator<GroupData> gIt=lgd.iterator();
-        gIds= new long[lgd.size()];
-        gNames = new String[lgd.size()];
-
-        int g=0;
-        while (gIt.hasNext()){// to select groups
-        	GroupData gda=gIt.next();
-			gNames[g]=(gda.getName());
-			gIds[g]=gda.getId();
-			g++;
-        }
-		// read data of first group for initial menu
-		
-        ctx = new SecurityContext(gIds[0]);
-        pjd = browser.getProjects(ctx);//, user.getId());
-        if (pjd.size()<1){
-        	pNames = new String []{"All"};
-        } else {
-        	Iterator<ProjectData> pIt=pjd.iterator();
-        	long [] pIds= new long[pjd.size()];
-        	pNames = new String[pjd.size()];
-        	int p=0;
-	        while (pIt.hasNext()){// to select projects
-	        	ProjectData pd=pIt.next();
-				pNames[p]=pd.getName();
-				pIds[p]=pd.getId();
-				p++;
-	        }
-        }
-
-		Object[] pArr=pjd.toArray();
-		ProjectData cP=(ProjectData)pArr[0];
-        Set<DatasetData> dsd = cP.getDatasets();
-        if (dsd.size()<1){
-			sets = new String[]{"All"};
-        }
-       	Iterator<DatasetData> SetIterator = dsd.iterator();
-       	Object[] dsda = dsd.toArray();
-        dataSetIds= new long [dsd.size()];
-        sets = new String[dsd.size()];
-        int c=0;
-        while (SetIterator.hasNext()){
-			DatasetData da = SetIterator.next();
-			sets[c]=da.getName();
-			dataSetIds[c]=da.getId();
-			c++;
-		}
-							
-        GenericDialog gd = new GenericDialog("Select Group folder");
-        gd.addDialogListener(this);
-        gd.addChoice("Group", gNames,gNames[0]);
-        gd.addChoice("Project", pNames,pNames[0]);
-        gd.addChoice("Images", sets,sets[0]);
-        prevpchoice=-1;
-        prevgchoice=-1;
-        dialogItemChanged(gd,null);
-        gd.showDialog();
-        
-        if (gd.wasCanceled()){
-        	return null;
-        }
-        @SuppressWarnings("unused")
-		int gchoice = gd.getNextChoiceIndex();
-        int pchoice = gd.getNextChoiceIndex();
-        int schoice = gd.getNextChoiceIndex();
-        //after all the choice load the right images
-		pArr=pjd.toArray();
-		cP=(ProjectData)pArr[pchoice];
-        dsd = cP.getDatasets();
-         if (dsd.size()<1){
-        	IJ.showMessage("This Project contains no Datasets");
-        	return null;
-        }
-       	SetIterator = dsd.iterator();
-       	
-       	dsda = dsd.toArray();
-       	sets = new String[dsd.size()];
-        long [] dataSetIds= new long [dsd.size()];
-        c=0;
-        while (SetIterator.hasNext()){
-			DatasetData da = SetIterator.next();
-			sets[c]=(da.getName());
-			dataSetIds[c]=da.getId();
-			c++;
-		}
-        List<Long> ids = Arrays.asList(dataSetIds[schoice]); //this is based on the dataset value
-        @SuppressWarnings({ "unchecked", "rawtypes" })
-		Collection<Long> idc =(Collection)ids;
-        Collection<ImageData> images = browser.getImagesForDatasets(ctx, idc);
-        credentials.setGroupID(((DatasetData)dsda[schoice]).getGroupId());
-        gateway.connect(credentials);
-        if (images.size()<1){
-        	IJ.showMessage("This Dataset contains no Images");
-        	return null;
-        }
-        return images;
-    }*/
 
     /**
      * Uploads the image to OMERO.
@@ -599,13 +507,43 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
      * @return
      * @throws Exception
      */
+	public Collection<ImageData> getImageCollection(){
+		Collection<ImageData> images=null;
+		try {
+			gateway = connectToOMERO(); // connects to omero
+			
+            images = getImages(gateway);
+		} catch (DSOutOfServiceException e){
+			IJ.log("Error in step 2");
+			IJ.log(e.toString());
+			IJ.showMessage(e.getMessage());
+			StackTraceElement[] t = e.getStackTrace();
+	    	for (int i=0;i<t.length;i++){
+	    		IJ.log(t[i].toString());
+	    	}
+	    }catch (Exception e) {
+	    	IJ.log("Error in step 3");
+	    	IJ.log(e.toString());
+	    	IJ.log(e.getMessage());
+	    	StackTraceElement[] t = e.getStackTrace();
+	    	for (int i=0;i<t.length;i++){
+	    		IJ.log(t[i].toString());
+	    	}
+            IJ.showMessage("An error occurred while loading the Collection.");
+       } 
+        return images;   
+	}
 	
-    public ArrayList<ImagePlus> getDatasetImages() {
-        Gateway gateway = null;
+    public ArrayList<ImagePlus> getDatasetImages() { // First thing that is run from the main plugin
+        
 		ArrayList<ImagePlus> imps = new ArrayList<ImagePlus>();    
         try {
 			gateway = connectToOMERO(); // connects to omero
+			ExperimenterData ed = gateway.getLoggedInUser();
+			Long gid= ed.getGroupId();
+			
             Collection<ImageData> images = getImages(gateway); //gets the collection
+            //IJ.showMessage("Dataset id "+curDataset);
             if (images!=null){
             	Iterator<ImageData> image = images.iterator(); 
             	int counter=0;  
@@ -613,122 +551,33 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
 	            	
 	            	counter++;
 	                ImageData data = image.next();
-	                //need to get the log window and position it
-	                Window logwindow =WindowManager.getWindow("Log");
-	                Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
-					int width = (int)screenSize.getWidth();
-					int height = (int)screenSize.getHeight();
-	                logwindow.setSize(width/4, height/2);
-	                logwindow.setLocation(0, 0);
-	                logwindow.toFront();
 	                IJ.log("Loading image "+counter+" of "+images.size());
-	                ImagePlus timp = openImagePlus(data.getId(), data);
+	                // here we load all single images, can be too much data
+	                ImagePlus timp = archiveImagePlus(data.getId(), data, gid);
+                	// here we have the image, and we can analyse and attach data}
 	                imps.add(timp);
 	            }
+	            
             }
         }catch (DSOutOfServiceException e){
         	 IJ.showMessage(e.getMessage());
  	    }catch (Exception e) {
         	IJ.log(e.getMessage());
+        	IJ.log(e.getLocalizedMessage());
+        	IJ.log(e.toString());
         	StackTraceElement[] t = e.getStackTrace();
         	for (int i=0;i<t.length;i++){
         		IJ.log(t[i].toString());
         	}
             IJ.showMessage("An error occurred while loading the image.");
-        } finally {
-            if (gateway != null) gateway.disconnect();
-        }
+        } 
         return imps;
     }
-
-	/*public boolean dialogItemChanged(GenericDialog dlog, AWTEvent ev){
-		Component [] cps =dlog.getComponents();
-        int gchoice=0;
-        int pchoice=0;
-        @SuppressWarnings("unused")
-		boolean noprojects=false;
-		for (int i=0;i<cps.length;i++){
-			switch (i){
-				case 0:
-					//this is the string of the groups, cannot change
-				break;
-				case 1:
-					gchoice = ((Choice)cps[i]).getSelectedIndex();
-					cps[i].setSize(180,10);
-				break;
-				case 2:
-					//this is the string of projects , cannot change
-				break;
-				case 3:
-					pchoice = ((Choice)cps[i]).getSelectedIndex();
-					cps[i].setSize(180,10);
-					if (prevgchoice!=gchoice){
-						try {
-							ctx = new SecurityContext(gIds[gchoice]);
-					        pjd = browser.getProjects(ctx);//, user.getId());
-					        ((Choice)cps[i]).removeAll();
-					        if (pjd.size()<1){
-					        	((Choice)cps[i]).add("No Projects");
-					        	((Choice)cps[i+2]).removeAll();
-					        	((Choice)cps[i+2]).add("No Datasets");
-					        	noprojects=true;
-					        	return false;
-					        }
-					        Iterator<ProjectData> pIt=pjd.iterator();
-					        long [] pIds= new long[pjd.size()];
-					        int p=0;
-					        while (pIt.hasNext()){// to select projects
-					        	ProjectData pd=pIt.next();
-								((Choice)cps[i]).add(pd.getName());
-								pIds[p]=pd.getId();
-								p++;
-					        }
-					        
-						} catch (Exception e){
-							
-						}
-						
-					}
-				break;
-				case 4:
-				break;
-				case 5:
-					cps[i].setSize(180,10);
-
-					if (pjd!=null){
-						if (prevpchoice!=pchoice || prevgchoice!=gchoice){
-							if (prevgchoice!=gchoice) {
-								pchoice=0;
-							}
-							Object[] pArr=pjd.toArray();
-							ProjectData cP=(ProjectData)pArr[pchoice];
-					        Set<DatasetData> dsd = cP.getDatasets();
-					        ((Choice)cps[i]).removeAll();
-					        if (dsd.size()<1){
-						        ((Choice)cps[i]).add("No Datasets");
-					        } 
-					       	Iterator<DatasetData> SetIterator = dsd.iterator();
-					       	long [] dataSetIds= new long [dsd.size()];
-					        int c=0;
-					        while (SetIterator.hasNext()){
-								DatasetData da = SetIterator.next();
-								((Choice)cps[i]).add(da.getName());
-								dataSetIds[c]=da.getId();
-								c++;
-							}
-						}
-					    
-					} 
-				break;
-				case 6:
-				break;
-			}
-		}
-		prevpchoice=pchoice;
-		prevgchoice=gchoice;
-		return true;
-	}*/
-    public boolean dialogItemChanged(GenericDialog dlog, AWTEvent ev){
+    protected long getDatasetID() {
+    	return dataChoice;
+    }
+    
+ 	public boolean dialogItemChanged(GenericDialog dlog, AWTEvent ev){ // this is to update the data selection menu
 		Component [] cps =dlog.getComponents();
         int gchoice=0;
         int pchoice=0;
@@ -873,7 +722,6 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
 				        		IJ.log(t[k].toString());
 				        	}
 						}
-						
 					}
 				break;
 				case 6:
@@ -925,7 +773,6 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
 					        }
 					        SortedSets=newstrings;
 						}
-					    
 					} 
 				break;
 				case 8:
@@ -937,20 +784,129 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
 		prevuchoice=uchoice;
 		return true;
 	}
+ 	
+ 	public void checkImageInfo(ImageData data, Gateway gw) throws Exception{
+ 		ImageData id = browser.getImage(ctx, data.getId());
+ 		IJ.log(""+id.getFilesetId()); // this contains data
+ 		//IJ.log(id.getReference().toString()); //still null
+ 		
+ 		omero.model.Image i1 = id.asImage();
+ 		IJ.log(""+i1.isLoaded()); // image is loaded
+ 		omero.model.Fileset f2 =i1.getFileset();
+ 		IObject f1 =browser.findIObject(ctx, "Fileset.class", f2.getId().getValue(),true);
+ 		IJ.log(""+f1.isLoaded()); //is not loaded
+ 		IJ.log(""+i1.getFileset().getPrimaryFilesetEntry().getClientPath().toString());
+ 		
+ 		//DataObject fs = browser.findObject(ctx, DataObject.class, id.getFilesetId()); // does not work with filesetid
+ 		//FileData fs2 = (FileData)fs;
+ 		//IJ.log(""+fs2.getAbsolutePath()); // also returns null // still null
+ 		//OriginalFile of = new OriginalFile(data.getId(), true);
+ 		//Set s1 = data.getAnnotations(); // only gets null
+ 		//IJ.log(""+s1.size());
+ 		
+ 		//IJ.log("doing this");
+ 		//IJ.log(of.getPath()); // is empty
+ 		
+ 		/*if (data.getAcquisitionDate()!=null) {
+			 IJ.log(data.getAcquisitionDate().toString());
+			 IJ.log(data.getParentFilePath());
+			 IJ.log(data.getPathToFile()); // returns null
+			 IJ.log(data.getReference().toString());
+		 } else {
+			 IJ.log("option 2");
+			 IJ.log(data.getCreated().toString());
+			 IJ.log("PFP");
+			 IJ.log(data.getParentFilePath()); // empty
+			 IJ.log("FP");
+			 IJ.log(data.getPathToFile()); //empty
+			 IJ.log("name");
+			 IJ.log(data.getName());
+			 IJ.log("desc"); //blank string
+			 IJ.log(data.getDescription()); 
+			 IJ.log("format"); 
+			 IJ.log(data.getFormat());
+			 
+			 // gives null pointer so dive deeper, change to asimage and get more info
+			 //IJ.log(data.getReference().toString());
+			 /*ome.model.core.Image im = data.asImage();
+			 ome.model.fs.Fileset fs = im.getFileset()i
+			 fs.addImage(im);
+			 omero.model.FilesetEntry fse =fs.getPrimaryFilesetEntry();
+			 
+			 if (fse!=null) {
+				 IJ.log(fse.getClientPath().getValue());
+			 }*/
+ 	//conclusion, cannot get file, so we need exporters
+ 		/*try{
+	 		OMEROLocation ol = new OMEROLocation(HOST,PORT,Username,Password); // causing conflict issues with omero update site and the downloadable jar from omero
+			
+			Context context = new Context(DefaultOMEROService.class);
+			OMEROService dos = context.service(OMEROService.class); // also not found
+			OMEROSession os = dos.createSession(ol);// Here we create a new session, but one should still exist based on the gateway connection previously made
+			//OMEROSession os = dos.session();
+			client cl = os.getClient();
+			
+ 			ServiceFactoryPrx sf = cl.getSession();
+ 	 		omero.api.ExporterPrx exp = sf.createExporter();
+ 			exp.addImage(data.getId());
+ 			long length = exp.generateTiff();
+ 			long read=0;
+ 			byte [] buf;
+ 			String temp = "f:/Temp/test.tif";
+ 			File f = new File(temp);
+ 			FileOutputStream output = new FileOutputStream(temp, true);
+ 			while (true) {
+ 				buf= exp.read(read,1000000);
+ 				output.write(buf);
+ 				if (buf.length<1000000) {
+ 					break;
+ 				}
+ 				read +=buf.length;
+ 			}
+ 			output.close();
+ 		}catch (Exception e) {
+ 			IJ.log(e.toString());
+	       	 IJ.log(e.getLocalizedMessage());
+	       	 IJ.log(e.getMessage());
+	       	 StackTraceElement[] t = e.getStackTrace();
+        	for (int i=0;i<t.length;i++){
+        		IJ.log(t[i].toString());
+        	}
+ 		} finally {
+
+ 		}
+ 		*/
+ 		
+ 	}
+ 	
+
 // used for testing when running the plugin stand alone
     public static void main(String[] args) {
-    	Open_Omero_Dataset om = new Open_Omero_Dataset();
-        ArrayList<ImagePlus> imps = om.getDatasetImages();
-        for (int i=0;i<imps.size();i++){
-        	imps.get(i).show();
-        }
-    }
+    	getOmeroIDs om = new getOmeroIDs();
+    	Collection<ImageData> images = om.getImageCollection(); // this gives the version error
+    	Long gid= om.gateway.getLoggedInUser().getGroupId();
+        //ExperimenterData user = om.gateway.getLoggedInUser();
 
-	@Override
-	public void run(String arg0) {
-		ArrayList<ImagePlus> imps = getDatasetImages();
-        for (int i=0;i<imps.size();i++){
-        	imps.get(i).show();
-        }
-	}
+        if (images!=null){
+        	Iterator<ImageData> image = images.iterator(); 
+        	 while (image.hasNext()) {
+        		 ImageData data = image.next();
+        		 try {
+        			 om.checkImageInfo(data, om.gateway);
+	    			 //ImagePlus timp = om.archiveImagePlus(data.getId(), data,gid);
+        			 //timp.show();
+	                } catch (Exception e) {
+	                	 IJ.log(e.toString());
+	                	 IJ.log(e.getLocalizedMessage());
+	                	 IJ.log(e.getMessage());
+	                	 StackTraceElement[] t = e.getStackTrace();
+	                 	for (int i=0;i<t.length;i++){
+	                 		IJ.log(t[i].toString());
+	                 	}
+	                }
+        	 }
+    	}
+    }
+    
+    
 }

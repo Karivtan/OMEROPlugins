@@ -332,7 +332,55 @@ public class Run_Omero_Plugin implements PlugIn, DialogListener {
                }
         	}
         	IJ.log("Finished quantification");
-        } else {
+        } /*else if (cmnd.equalsIgnoreCase("Timed Skeleton Analysis")) {
+        	// here we need to attach tables but also images as well as other filetypes
+        	//We need to pass to getOmeroDatasetandattach for tiff images, a file, description, type, mime type (for example "image/tiff"), and the imagedata
+        	IJ.log("Running quantification");
+        	getOmeroDatasetAndAttachData om = new getOmeroDatasetAndAttachData();
+        	Collection<ImageData> images = om.getImageCollection(); // this gives the version error
+        	if (images!=null){
+        		int counter=0; 
+            	Iterator<ImageData> image = images.iterator(); 
+            	while (image.hasNext()) {
+            	//if (image.hasNext()) {
+            		counter++;
+            		ImageData data = image.next();
+            		setLogWindowSizeAndLocation();
+            		try {
+	                	ImagePlus timp = om.openImagePlus(data.getId(), data, data.getGroupId());
+	                	ResultsTable [] rts = PI_Hoechst_Measurements.getOmeroData(timp,hch,pch,rsize,prom,pLimit,hLimit);
+		                om.attachDataToImage(rts[0], 0,data, "details");
+		                dataSet.incrementCounter();
+		                dataSet.addValue("Image Name",rts[1].getStringValue("Image Name",0));
+		                dataSet.addValue("% Cell Death",rts[1].getValue("% Cell Death", 0));
+	                } catch (Exception e) {
+	                	 IJ.log("Error Loading image "+counter+" of "+images.size());
+	                	 IJ.log(e.toString());
+	                	 IJ.log(e.getLocalizedMessage());
+	                	 IJ.log(e.getMessage());
+                    	StackTraceElement[] t = e.getStackTrace();
+                    	for (int i=0;i<t.length;i++){
+                    		IJ.log(t[i].toString());
+                    	}
+	                }
+            		
+            	}
+            	try {
+            		om.attachDataToDataset(dataSet, 1, "Dataset Summary");// to implement
+            		
+            	} catch (Exception e) {
+               	 IJ.log("Could not attach table to dataset");
+               	 IJ.log(e.toString());
+               	 IJ.log(e.getLocalizedMessage());
+               	 IJ.log(e.getMessage());
+               	StackTraceElement[] t = e.getStackTrace();
+               	for (int i=0;i<t.length;i++){
+               		IJ.log(t[i].toString());
+               	}
+               }
+        	}
+        	IJ.log("Finished quantification");
+        }*/	else {
         	IJ.log(cmnd);
 			IJ.showMessage("not implemented yet");
 		}
