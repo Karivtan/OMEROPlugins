@@ -76,9 +76,8 @@ import net.imglib2.img.display.imagej.ImageJFunctions;
 
 
 /**
- * This script uses ImageJ to Subtract Background
- * The purpose of the script is to be used in the Scripting Dialog
- * of Fiji (File > New > Script).
+ * This script uses ImageJ to open a complete dataset of images
+ * TODO after selecting alg adimns group the menu does not update properly
  */
 public class Open_Omero_Dataset implements PlugIn, DialogListener{
 
@@ -191,30 +190,29 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
     }
 
     /**
-     * Connects to OMERO and returns a gateway instance allowing to interact
-     * with the server
-     *
-     * @return See above
-     * @throws Exception
+     * Connects to OMERO and returns a gateway instance allowing to interact with the server
+     * 
+     * @return the connected gateway
+     * @throws Exception when things go wrong connecting
      */
      
-    private Gateway connectToOMERO() throws Exception {
+    private Gateway connectToOMERO() throws Exception { 
     		JTextField tf,tf1,tf2;
     	try{
-    		ResultsTable prevChoices=ResultsTable.open(IJ.getDirectory("plugins")+"Leidenuniv/Omero/OmeroSettings.csv");
+    		ResultsTable prevChoices=ResultsTable.open(IJ.getDirectory("plugins")+"Leidenuniv/Omero/OmeroSettings.csv"); // this loads the latest OMERO login settings to remember user, server, and port number
     		HOST=prevChoices.getStringValue("Host",0);
     		Username=prevChoices.getStringValue("Username",0);
     		PORT=Integer.parseInt(prevChoices.getStringValue("Port",0));
     		tf1 = new JTextField(HOST,25); //Host
     		tf = new JTextField(Username,25); //username
     		tf2 = new JTextField(""+PORT,15); //Port
-    	} catch (Exception e){
+    	} catch (Exception e){// if nothing can be loaded start an empty field
     		tf1 = new JTextField(25); //Host
     		tf = new JTextField(25); //username
     		tf2 = new JTextField(15); //Port
     	}
     	IJ.log("\\Clear");
-    	//Menu for login pop-up, to add host, and port so it can be used universily
+    	//Menu for login pop-up, to add host, and port so it can be used universally
 		GenericDialog userData = new GenericDialog("Fill in login information");
 		GridBagConstraints gb = new GridBagConstraints();
         gb.gridx=GridBagConstraints.RELATIVE;
@@ -270,62 +268,49 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
     }
 
     /**
-     * Returns the images contained in the specified dataset.
+     * Returns the images contained in the dataset that can be selected.
      *
      * @param gateway The gateway
      * @return See above
      * @throws Exception
+     * 
      */
      
-    //private Collection<ImageData> getImages(Gateway gateway)
+    //private Collection<ImageData> getImages(Gateway gateway) //2nd part of the plugin after omero connection is established
     private Collection<ImageData> getImages(Gateway gateway)
             throws Exception
     {
-        browser = gateway.getFacility(BrowseFacility.class);
-        ExperimenterData user = gateway.getLoggedInUser();
-        cUid= user.getId();
+        browser = gateway.getFacility(BrowseFacility.class); // set the browsefacility
+        ExperimenterData user = gateway.getLoggedInUser(); // get logged in uder
+        cUid= user.getId(); // get user id
         List<GroupData> lgd = user.getGroups(); // get all groups you have access to
-        GroupData gd1= lgd.get(0);
-        ctx = new SecurityContext(gd1.getId());
-        Set<GroupData> groupset = gateway.getFacility(BrowseFacility.class).getAvailableGroups(ctx, user);
-        groupsetarray = groupset.toArray();
+        GroupData gd1= lgd.get(0); // get the first group,used to get the allowed access data
+        ctx = new SecurityContext(gd1.getId()); // reload the security context
+        Set<GroupData> groupset = gateway.getFacility(BrowseFacility.class).getAvailableGroups(ctx, user); // get all available groups
+        groupsetarray = groupset.toArray();// make an array of the groups people have access to
 
-//        Iterator<GroupData> gIt=lgd.iterator(); 
-        gIds= new long[groupsetarray.length];
-        gNames = new String[groupsetarray.length];
-        gSortedNames = new String[groupsetarray.length];
+        gIds= new long[groupsetarray.length]; // for the groupIDs
+        gNames = new String[groupsetarray.length]; //for the group names
+        gSortedNames = new String[groupsetarray.length]; //for the alfabetically sorted names 
         
-        
-        for (int g=0;g<groupsetarray.length;g++) {
-        	GroupData gda= (GroupData)groupsetarray[g];
-        	gNames[g]=(gda.getName());
-			gSortedNames[g]=(gda.getName());
-			gIds[g]=gda.getId();
+        for (int g=0;g<groupsetarray.length;g++) { // go through all the groups you have access to
+        	GroupData gda= (GroupData)groupsetarray[g]; // take the current Groupdata
+        	gNames[g]=(gda.getName()); // get the name
+			gSortedNames[g]=(gda.getName()); // add the name also to the sortedarray
+			gIds[g]=gda.getId(); // add the ids to the id array
         }
-        /*while (gIt.hasNext()){// to select groups
-        	GroupData gda=gIt.next();
-			gNames[g]=(gda.getName());
-			gSortedNames[g]=(gda.getName());
-			gIds[g]=gda.getId();
-			g++;
-        }*/
-		// read data of first group for initial menu
-        
-        
-		
-		GroupData grd2= (GroupData)groupsetarray[0];
-		Set<ExperimenterData> users = grd2.getExperimenters();
-        //IJ.log(""+users.size());
-        uIds= new long[users.size()];
-        if (users.size()<2) {
+
+        GroupData grd2= (GroupData)groupsetarray[0]; // get the first group to display in the menu
+		Set<ExperimenterData> users = grd2.getExperimenters(); // get all potential users in that group
+        uIds= new long[users.size()]; // make a user id array
+        if (users.size()<2) { // if there is only one used display all
         	uNames = new String[] {"All"};
-        } else {
+        } else { // otherwise add all the potential users to a list
         	Iterator<ExperimenterData> uIt=users.iterator();
-        	
         	uNames = new String[users.size()];
         	uSortedNames = new String[users.size()];
         	int u=0;
-	        while (uIt.hasNext()){// to select projects
+	        while (uIt.hasNext()){// get data of all users you have access to
 	        	ExperimenterData ud=uIt.next();
 				uNames[u]=ud.getUserName();
 				uSortedNames[u]=ud.getUserName();
@@ -335,15 +320,15 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
         }	
         
         pjd = browser.getProjects(ctx);//, user.getId()); // this can be used to get the users data specifically
-        if (pjd.size()<1){
+        if (pjd.size()<1){// if there is only one project display all
         	pNames = new String []{"All"};
-        } else {
+        } else {// else show the names
         	Iterator<ProjectData> pIt=pjd.iterator();
         	long [] pIds= new long[pjd.size()];
         	pNames = new String[pjd.size()];
         	pSortedNames = new String[pjd.size()];
         	int p=0;
-	        while (pIt.hasNext()){// to select projects
+	        while (pIt.hasNext()){// add all project names to the menu
 	        	ProjectData pd=pIt.next();
 				pNames[p]=pd.getName();
 				pSortedNames[p]=pd.getName();
@@ -357,6 +342,7 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
 		//IJ.log(""+pArr.length);
 		Iterator<DatasetData> SetIterator;
 		int c=0;
+	// Add all datasetdata to the choice lists
 		if(pArr.length>0) {
 			cP=(ProjectData)pArr[0];
 			 dsd = cP.getDatasets();
@@ -371,8 +357,6 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
         	SetIterator = dsd.iterator();
            	dsda = dsd.toArray();
             dataSetIds= new long [dsd.size()];
-            
-            
             while (SetIterator.hasNext()){
     			DatasetData da = SetIterator.next();
     			sets[c]=da.getName();
@@ -381,6 +365,8 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
     			c++;
     		}
         }
+        
+// Sort all the data for the menu
         if (SortedSets!=null ) {
         	Arrays.sort(SortedSets);
         	//IJ.log("Sorting sets");
@@ -403,8 +389,8 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
         } else if (uSortedNames.length>1) {
         	Arrays.sort(uSortedNames);
         }
-        
-        
+
+// create the menu for selecting which data you want to open
         GenericDialog gd = new GenericDialog("Select Group/User/Project/Dataset");
         gd.addDialogListener(this);
         gd.addChoice("Group", gSortedNames,gSortedNames[0]);
@@ -415,12 +401,13 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
         prevpchoice=-1;
         prevgchoice=-1;
         prevuchoice=-1;
-        dialogItemChanged(gd,null);
+        dialogItemChanged(gd,null); // runs through the updating of the menu once
         gd.showDialog();
         
-        if (gd.wasCanceled()){
+        if (gd.wasCanceled()){ // if cancel was pressed to not open anything.
         	return null;
         }
+        
         @SuppressWarnings("unused")
 		int gchoice = gd.getNextChoiceIndex();
         int uchoice = gd.getNextChoiceIndex();
@@ -428,8 +415,6 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
         schoice = gd.getNextChoiceIndex();
         
         //IJ.log(""+gchoice+","+pchoice+","+schoice);
-
-        
         //after all the choice load the right images
 		pArr=pjd.toArray();
 		int puchoice;
@@ -451,8 +436,7 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
 			schoice=0;
 		}
 		
-		
-		cP=(ProjectData)pArr[puchoice]; //indexoutofboundsexception
+		cP=(ProjectData)pArr[puchoice]; 
         dsd = cP.getDatasets();
          if (dsd.size()<1){
         	IJ.showMessage("This Project contains no Datasets");
@@ -467,7 +451,7 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
         while (SetIterator.hasNext()){
 			DatasetData da = SetIterator.next();
 			sets[c]=(da.getName());
-			SortedSets[c]=(da.getName()); // this now gives an error indexoutofbounds
+			SortedSets[c]=(da.getName()); 
 			dataSetIds[c]=da.getId();
 			c++;
 		}
@@ -480,129 +464,21 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
 		Collection<Long> idc =(Collection)ids;
         Collection<ImageData> images = browser.getImagesForDatasets(ctx, idc);
         credentials.setGroupID(((DatasetData)dsda[suchoice]).getGroupId());
-        gateway.connect(credentials);
+        gateway.connect(credentials); // reconnect to get the right privileges
         if (images.size()<1){
         	IJ.showMessage("This Dataset contains no Images");
         	return null;
         }
         return images;
     }
-    /*private Collection<ImageData> getImages(Gateway gateway)
-            throws Exception
-    {
-        browser = gateway.getFacility(BrowseFacility.class);
-        ExperimenterData user = gateway.getLoggedInUser();
-        List<GroupData> lgd = user.getGroups();
-		Iterator<GroupData> gIt=lgd.iterator();
-        gIds= new long[lgd.size()];
-        gNames = new String[lgd.size()];
-
-        int g=0;
-        while (gIt.hasNext()){// to select groups
-        	GroupData gda=gIt.next();
-			gNames[g]=(gda.getName());
-			gIds[g]=gda.getId();
-			g++;
-        }
-		// read data of first group for initial menu
-		
-        ctx = new SecurityContext(gIds[0]);
-        pjd = browser.getProjects(ctx);//, user.getId());
-        if (pjd.size()<1){
-        	pNames = new String []{"All"};
-        } else {
-        	Iterator<ProjectData> pIt=pjd.iterator();
-        	long [] pIds= new long[pjd.size()];
-        	pNames = new String[pjd.size()];
-        	int p=0;
-	        while (pIt.hasNext()){// to select projects
-	        	ProjectData pd=pIt.next();
-				pNames[p]=pd.getName();
-				pIds[p]=pd.getId();
-				p++;
-	        }
-        }
-
-		Object[] pArr=pjd.toArray();
-		ProjectData cP=(ProjectData)pArr[0];
-        Set<DatasetData> dsd = cP.getDatasets();
-        if (dsd.size()<1){
-			sets = new String[]{"All"};
-        }
-       	Iterator<DatasetData> SetIterator = dsd.iterator();
-       	Object[] dsda = dsd.toArray();
-        dataSetIds= new long [dsd.size()];
-        sets = new String[dsd.size()];
-        int c=0;
-        while (SetIterator.hasNext()){
-			DatasetData da = SetIterator.next();
-			sets[c]=da.getName();
-			dataSetIds[c]=da.getId();
-			c++;
-		}
-							
-        GenericDialog gd = new GenericDialog("Select Group folder");
-        gd.addDialogListener(this);
-        gd.addChoice("Group", gNames,gNames[0]);
-        gd.addChoice("Project", pNames,pNames[0]);
-        gd.addChoice("Images", sets,sets[0]);
-        prevpchoice=-1;
-        prevgchoice=-1;
-        dialogItemChanged(gd,null);
-        gd.showDialog();
-        
-        if (gd.wasCanceled()){
-        	return null;
-        }
-        @SuppressWarnings("unused")
-		int gchoice = gd.getNextChoiceIndex();
-        int pchoice = gd.getNextChoiceIndex();
-        int schoice = gd.getNextChoiceIndex();
-        //after all the choice load the right images
-		pArr=pjd.toArray();
-		cP=(ProjectData)pArr[pchoice];
-        dsd = cP.getDatasets();
-         if (dsd.size()<1){
-        	IJ.showMessage("This Project contains no Datasets");
-        	return null;
-        }
-       	SetIterator = dsd.iterator();
-       	
-       	dsda = dsd.toArray();
-       	sets = new String[dsd.size()];
-        long [] dataSetIds= new long [dsd.size()];
-        c=0;
-        while (SetIterator.hasNext()){
-			DatasetData da = SetIterator.next();
-			sets[c]=(da.getName());
-			dataSetIds[c]=da.getId();
-			c++;
-		}
-        List<Long> ids = Arrays.asList(dataSetIds[schoice]); //this is based on the dataset value
-        @SuppressWarnings({ "unchecked", "rawtypes" })
-		Collection<Long> idc =(Collection)ids;
-        Collection<ImageData> images = browser.getImagesForDatasets(ctx, idc);
-        credentials.setGroupID(((DatasetData)dsda[schoice]).getGroupId());
-        gateway.connect(credentials);
-        if (images.size()<1){
-        	IJ.showMessage("This Dataset contains no Images");
-        	return null;
-        }
-        return images;
-    }*/
-
+ 
     /**
-     * Uploads the image to OMERO.
      * 
-     * @param gateway The gateway
-     * @param path The path to the image to upload
-     * @return
-     * @throws Exception
+     * @return the arraylist of imagePlus's in the dataset
      */
-	
     public ArrayList<ImagePlus> getDatasetImages() {
-        Gateway gateway = null;
-		ArrayList<ImagePlus> imps = new ArrayList<ImagePlus>();    
+        Gateway gateway = null; // initialize the gateway
+		ArrayList<ImagePlus> imps = new ArrayList<ImagePlus>(); //create an empty arraylist   
         try {
 			gateway = connectToOMERO(); // connects to omero
             Collection<ImageData> images = getImages(gateway); //gets the collection
@@ -636,126 +512,45 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
         	}
             IJ.showMessage("An error occurred while loading the image.");
         } finally {
-            if (gateway != null) gateway.disconnect();
+            //if (gateway != null) gateway.disconnect();
         }
         return imps;
     }
-
-	/*public boolean dialogItemChanged(GenericDialog dlog, AWTEvent ev){
-		Component [] cps =dlog.getComponents();
-        int gchoice=0;
-        int pchoice=0;
-        @SuppressWarnings("unused")
-		boolean noprojects=false;
-		for (int i=0;i<cps.length;i++){
-			switch (i){
-				case 0:
-					//this is the string of the groups, cannot change
-				break;
-				case 1:
-					gchoice = ((Choice)cps[i]).getSelectedIndex();
-					cps[i].setSize(180,10);
-				break;
-				case 2:
-					//this is the string of projects , cannot change
-				break;
-				case 3:
-					pchoice = ((Choice)cps[i]).getSelectedIndex();
-					cps[i].setSize(180,10);
-					if (prevgchoice!=gchoice){
-						try {
-							ctx = new SecurityContext(gIds[gchoice]);
-					        pjd = browser.getProjects(ctx);//, user.getId());
-					        ((Choice)cps[i]).removeAll();
-					        if (pjd.size()<1){
-					        	((Choice)cps[i]).add("No Projects");
-					        	((Choice)cps[i+2]).removeAll();
-					        	((Choice)cps[i+2]).add("No Datasets");
-					        	noprojects=true;
-					        	return false;
-					        }
-					        Iterator<ProjectData> pIt=pjd.iterator();
-					        long [] pIds= new long[pjd.size()];
-					        int p=0;
-					        while (pIt.hasNext()){// to select projects
-					        	ProjectData pd=pIt.next();
-								((Choice)cps[i]).add(pd.getName());
-								pIds[p]=pd.getId();
-								p++;
-					        }
-					        
-						} catch (Exception e){
-							
-						}
-						
-					}
-				break;
-				case 4:
-				break;
-				case 5:
-					cps[i].setSize(180,10);
-
-					if (pjd!=null){
-						if (prevpchoice!=pchoice || prevgchoice!=gchoice){
-							if (prevgchoice!=gchoice) {
-								pchoice=0;
-							}
-							Object[] pArr=pjd.toArray();
-							ProjectData cP=(ProjectData)pArr[pchoice];
-					        Set<DatasetData> dsd = cP.getDatasets();
-					        ((Choice)cps[i]).removeAll();
-					        if (dsd.size()<1){
-						        ((Choice)cps[i]).add("No Datasets");
-					        } 
-					       	Iterator<DatasetData> SetIterator = dsd.iterator();
-					       	long [] dataSetIds= new long [dsd.size()];
-					        int c=0;
-					        while (SetIterator.hasNext()){
-								DatasetData da = SetIterator.next();
-								((Choice)cps[i]).add(da.getName());
-								dataSetIds[c]=da.getId();
-								c++;
-							}
-						}
-					    
-					} 
-				break;
-				case 6:
-				break;
-			}
-		}
-		prevpchoice=pchoice;
-		prevgchoice=gchoice;
-		return true;
-	}*/
-    public boolean dialogItemChanged(GenericDialog dlog, AWTEvent ev){
+    /**
+     * Happens on changing the selection in the genericdialog to select the correct dataset.
+     */
+    public boolean dialogItemChanged(GenericDialog dlog, AWTEvent ev){ // this happens when something is changed in the dataset selection menu
 		Component [] cps =dlog.getComponents();
         int gchoice=0;
         int pchoice=0;
         int uchoice=0;
         @SuppressWarnings("unused")
 		boolean noprojects=false;
-		//IJ.log("prevp "+prevpchoice+", "+((Choice)cps[5]).getSelectedIndex());
+		
 		//IJ.log("prevg "+prevgchoice+", "+((Choice)cps[1]).getSelectedIndex());
         //IJ.log("prevu "+prevuchoice+", "+((Choice)cps[3]).getSelectedIndex());
-		for (int i=0;i<cps.length;i++){
+        //IJ.log("prevp "+prevpchoice+", "+((Choice)cps[5]).getSelectedIndex());
+		for (int i=0;i<cps.length;i++){ // run through all components
 			switch (i){
 				case 0:
-					//this is the string of the groups, cannot change
+					//this is the string group in the display, cannot change
 				break;
-				case 1:
-					gchoice = ((Choice)cps[i]).getSelectedIndex();
+				case 1: // a group change happened
+					gchoice = ((Choice)cps[i]).getSelectedIndex(); // get the current groupchoice
 					cps[i].setSize(180,10);
+					if (prevgchoice!=gchoice){
+						uchoice=0; // always reset to the first user on a group change
+					}
 				break;
-				case 2:
+				case 2://this is the string User in the display, cannot change
 				break;
 				case 3:
-					uchoice = ((Choice)cps[i]).getSelectedIndex();
+					uchoice = ((Choice)cps[i]).getSelectedIndex(); // get the current user choice
 					cps[i].setSize(180,10);
 					if (prevgchoice!=gchoice){ // we need to load new users
 						try {
-							String gString =gSortedNames[gchoice];
-							int guchoice =Arrays.asList(gNames).indexOf(gString);
+							String gString =gSortedNames[gchoice]; // gets the groupchoice
+							int guchoice =Arrays.asList(gNames).indexOf(gString); // gets the index of this choice in the id array
 							String uString =uSortedNames[uchoice];
 							int uuchoice =Arrays.asList(uNames).indexOf(uString);
 							//IJ.log(gString);
@@ -807,18 +602,18 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
 				        		IJ.log(t[k].toString());
 				        	}
 						}
-					}
+					} 
 				break;
 				case 4:
 					//this is the string of projects , cannot change
 				break;
 				case 5:
 					pchoice = ((Choice)cps[i]).getSelectedIndex();
-					uchoice = ((Choice)cps[i-2]).getSelectedIndex();
+					uchoice = ((Choice)cps[i-2]).getSelectedIndex(); // should not be needed since it gets updated with i=3
 					cps[i].setSize(180,10);
 					String uString =uSortedNames[uchoice];
 					int uuchoice =Arrays.asList(uNames).indexOf(uString);
-					if (uuchoice<0) {
+					if (uuchoice<0) { // if the user does not exist in the list then the first one is chosen
 						uuchoice=0;
 					}
 					cUid = uIds[uuchoice];
@@ -838,6 +633,9 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
 					        	((Choice)cps[i]).add("No Projects");
 					        	((Choice)cps[i+2]).removeAll();
 					        	((Choice)cps[i+2]).add("No Datasets");
+					        	prevpchoice=pchoice;
+					        	prevgchoice=gchoice;
+					    		prevuchoice=uchoice;
 					        	noprojects=true;
 					        	return false;
 					        }
@@ -876,7 +674,7 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
 						
 					}
 				break;
-				case 6:
+				case 6://this is the string dataset in the display, cannot change
 				break;
 				case 7:
 					cps[i].setSize(180,10);
@@ -938,6 +736,11 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
 		return true;
 	}
 // used for testing when running the plugin stand alone
+    /**
+     * runs the plugin and opens a selected dataset image set and displays them.
+     * @param args not used currently
+     * for testing the plugin
+     */
     public static void main(String[] args) {
     	Open_Omero_Dataset om = new Open_Omero_Dataset();
         ArrayList<ImagePlus> imps = om.getDatasetImages();
@@ -947,6 +750,9 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
     }
 
 	@Override
+	/**
+	 * runs the plugin and opens a selected dataset image set and displays them.
+	 */
 	public void run(String arg0) {
 		ArrayList<ImagePlus> imps = getDatasetImages();
         for (int i=0;i<imps.size();i++){

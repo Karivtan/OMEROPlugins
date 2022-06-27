@@ -114,10 +114,8 @@ import net.imglib2.img.display.imagej.ImageJFunctions;
 
 
 /**
- * This script uses ImageJ to Subtract Background
- * The purpose of the script is to be used in the Scripting Dialog
- * of Fiji (File > New > Script).
- */
+ * This plugin is to get a connection to OMERO, obtain an image collection and to attach data back to OMERO 
+*/
 public class getOmeroDatasetAndAttachData implements DialogListener, PlugIn{
 
     // Edit value
@@ -144,13 +142,14 @@ public class getOmeroDatasetAndAttachData implements DialogListener, PlugIn{
 	private Object[] groupsetarray;
 	
     /**
-     * Open an image using the Bio-Formats importer.
+     * Open an image using the Bio-Formats LOCI imageplusreader.
      *
      * @param imageId The id of the image to open
+     * @param gid The group id to which the image belongs 
      * @throws Exception
      */
     
-    protected ImagePlus openImagePlus(Long imageId, ImageData data, Long gid)
+    protected ImagePlus openImagePlus(Long imageId, Long gid)
         throws Exception
     {
         OMEROLocation ol = new OMEROLocation(HOST,PORT,Username,Password); // causing conflict issues with omero update site and the downloadable jar from omero
@@ -158,11 +157,7 @@ public class getOmeroDatasetAndAttachData implements DialogListener, PlugIn{
 		Context context = ij.context();
 		OMEROService dos = context.service(OMEROService.class); // also not found
 		OMEROSession os = dos.createSession(ol);// Here we create a new session, but one should still exist based on the gateway connection previously made
-		//OMEROSession os = dos.session();
 		client cl = os.getClient();
-        //d = dos.downloadImage(cl,imageId); //this now gives an error 14-10-2020 based on scifio 0.40.0 working with 0.37.3
-        // stopped working alltogether on 26-05-21
-        //caused by the fact that the string needs to be converted to an URILocation
 		String credentials ="location=[OMERO] open=[omero:server=";
 		credentials += cl.getProperty("omero.host");
 		credentials +="\nuser=";
@@ -176,12 +171,6 @@ public class getOmeroDatasetAndAttachData implements DialogListener, PlugIn{
 		credentials +="]";
 		credentials +=" windowless=true ";
 		LociImporter lc = new LociImporter();
-		// uses a display handler to show the file. can potentially be done without that by recoding the importer here
-		/*
-		 *  
-		 *  
-		 *  /
-		 */
 		ImporterOptions options = null;
 		ImagePlus[] imps = null;
 		try {
@@ -222,9 +211,7 @@ public class getOmeroDatasetAndAttachData implements DialogListener, PlugIn{
     }
 
     /**
-     * Connects to OMERO and returns a gateway instance allowing to interact
-     * with the server
-     *
+     * Connects to OMERO and returns a gateway instance allowing to interact with the server
      * @return See above
      * @throws Exception
      */
@@ -338,16 +325,6 @@ public class getOmeroDatasetAndAttachData implements DialogListener, PlugIn{
 			gSortedNames[g]=(gda.getName());
 			gIds[g]=gda.getId();
         }
-        /*while (gIt.hasNext()){// to select groups
-        	GroupData gda=gIt.next();
-			gNames[g]=(gda.getName());
-			gSortedNames[g]=(gda.getName());
-			gIds[g]=gda.getId();
-			g++;
-        }*/
-		// read data of first group for initial menu
-        
-        
 		
 		GroupData grd2= (GroupData)groupsetarray[0];
 		Set<ExperimenterData> users = grd2.getExperimenters();
@@ -524,7 +501,10 @@ public class getOmeroDatasetAndAttachData implements DialogListener, PlugIn{
         return images;
     }
 
-
+    /**
+     * 
+     * @return Gets the current image collection
+     */
 	public Collection<ImageData> getImageCollection(){
 		Collection<ImageData> images=null;
 		try {
@@ -552,6 +532,10 @@ public class getOmeroDatasetAndAttachData implements DialogListener, PlugIn{
         return images;   
 	}
 	
+	/**
+	 * 
+	 * @return an arraylist of imageplusses contained in the dataset.
+	 */
     public ArrayList<ImagePlus> getDatasetImages() { // First thing that is run from the main plugin
         
 		ArrayList<ImagePlus> imps = new ArrayList<ImagePlus>();    
@@ -569,18 +553,9 @@ public class getOmeroDatasetAndAttachData implements DialogListener, PlugIn{
 	            	
 	            	counter++;
 	                ImageData data = image.next();
-	                //need to get the log window and position it
-	                /*Window logwindow =WindowManager.getWindow("Log");
-	                Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
-					int width = (int)screenSize.getWidth();
-					int height = (int)screenSize.getHeight();
-	                logwindow.setSize(width/4, height/2);
-	                logwindow.setLocation(0, 0);
-	                logwindow.toFront();*/
 	                IJ.log("Loading image "+counter+" of "+images.size());
 	                // here we load all single images, can be too much data
-	                ImagePlus timp = openImagePlus(data.getId(), data, gid);
-	                
+	                ImagePlus timp = openImagePlus(data.getId(), gid);
                 	// here we have the image, and we can analyse and attach data}
 	                imps.add(timp);
 	            }
@@ -600,10 +575,19 @@ public class getOmeroDatasetAndAttachData implements DialogListener, PlugIn{
         } 
         return imps;
     }
+    /**
+     * 
+     * @return the dataset id selected
+     */
     protected long getDatasetID() {
     	return dataChoice;
     }
-    
+    /**
+     * 
+     * @param rt the resultstable to add to the data
+     * @param stringcolumns the amount of string columns in the beginning
+     * @param target the object that needs the resultstable attached
+     */
     protected void attachDataToImage(ResultsTable rt, int stringcolumns, DataObject target) {
     	String headings4=rt.getColumnHeadings();
     	headings4.trim();
@@ -645,6 +629,14 @@ public class getOmeroDatasetAndAttachData implements DialogListener, PlugIn{
         	}
        	}
     }
+    
+    /**
+     * 
+     * @param rt the resultstable to add
+     * @param stringcolumns the amount of string columns in the beginning
+     * @param target the object that needs the resultstable attached
+     * @param title of the attached table
+     */
     protected void attachDataToImage(ResultsTable rt, int stringcolumns, DataObject target, String title) {
     	String headings4=rt.getColumnHeadings();
     	headings4.trim();
@@ -686,6 +678,12 @@ public class getOmeroDatasetAndAttachData implements DialogListener, PlugIn{
         	}
        	}
     }
+    
+    /**
+     * 
+     * @param rt Resultstable to add
+     * @param stringcolumns number of string columns in the table
+     */
     protected void attachDataToDataset(ResultsTable rt, int stringcolumns) {
     	String headings4=rt.getColumnHeadings();
     	headings4.trim();
@@ -727,7 +725,12 @@ public class getOmeroDatasetAndAttachData implements DialogListener, PlugIn{
         	}
        	}
     }
-    
+    /**
+     * 
+     * @param rt Resultstable to add
+     * @param stringcolumns number of string columns in the table
+     * @param title title of the attached table
+     */
     protected void attachDataToDataset(ResultsTable rt, int stringcolumns, String title) {
     	String headings4=rt.getColumnHeadings();
     	headings4.trim();
@@ -768,35 +771,41 @@ public class getOmeroDatasetAndAttachData implements DialogListener, PlugIn{
         	}
        	}
     }
-    
-	public boolean dialogItemChanged(GenericDialog dlog, AWTEvent ev){
+    /**
+     * Happens on changing the selection in the genericdialog to select the correct dataset.
+     */
+    public boolean dialogItemChanged(GenericDialog dlog, AWTEvent ev){ // this happens when something is changed in the dataset selection menu
 		Component [] cps =dlog.getComponents();
         int gchoice=0;
         int pchoice=0;
         int uchoice=0;
         @SuppressWarnings("unused")
 		boolean noprojects=false;
-		//IJ.log("prevp "+prevpchoice+", "+((Choice)cps[5]).getSelectedIndex());
+		
 		//IJ.log("prevg "+prevgchoice+", "+((Choice)cps[1]).getSelectedIndex());
         //IJ.log("prevu "+prevuchoice+", "+((Choice)cps[3]).getSelectedIndex());
-		for (int i=0;i<cps.length;i++){
+        //IJ.log("prevp "+prevpchoice+", "+((Choice)cps[5]).getSelectedIndex());
+		for (int i=0;i<cps.length;i++){ // run through all components
 			switch (i){
 				case 0:
-					//this is the string of the groups, cannot change
+					//this is the string group in the display, cannot change
 				break;
-				case 1:
-					gchoice = ((Choice)cps[i]).getSelectedIndex();
+				case 1: // a group change happened
+					gchoice = ((Choice)cps[i]).getSelectedIndex(); // get the current groupchoice
 					cps[i].setSize(180,10);
+					if (prevgchoice!=gchoice){
+						uchoice=0; // always reset to the first user on a group change
+					}
 				break;
-				case 2:
+				case 2://this is the string User in the display, cannot change
 				break;
 				case 3:
-					uchoice = ((Choice)cps[i]).getSelectedIndex();
+					uchoice = ((Choice)cps[i]).getSelectedIndex(); // get the current user choice
 					cps[i].setSize(180,10);
 					if (prevgchoice!=gchoice){ // we need to load new users
 						try {
-							String gString =gSortedNames[gchoice];
-							int guchoice =Arrays.asList(gNames).indexOf(gString);
+							String gString =gSortedNames[gchoice]; // gets the groupchoice
+							int guchoice =Arrays.asList(gNames).indexOf(gString); // gets the index of this choice in the id array
 							String uString =uSortedNames[uchoice];
 							int uuchoice =Arrays.asList(uNames).indexOf(uString);
 							//IJ.log(gString);
@@ -848,18 +857,18 @@ public class getOmeroDatasetAndAttachData implements DialogListener, PlugIn{
 				        		IJ.log(t[k].toString());
 				        	}
 						}
-					}
+					} 
 				break;
 				case 4:
 					//this is the string of projects , cannot change
 				break;
 				case 5:
 					pchoice = ((Choice)cps[i]).getSelectedIndex();
-					uchoice = ((Choice)cps[i-2]).getSelectedIndex();
+					uchoice = ((Choice)cps[i-2]).getSelectedIndex(); // should not be needed since it gets updated with i=3
 					cps[i].setSize(180,10);
 					String uString =uSortedNames[uchoice];
 					int uuchoice =Arrays.asList(uNames).indexOf(uString);
-					if (uuchoice<0) {
+					if (uuchoice<0) { // if the user does not exist in the list then the first one is chosen
 						uuchoice=0;
 					}
 					cUid = uIds[uuchoice];
@@ -879,6 +888,9 @@ public class getOmeroDatasetAndAttachData implements DialogListener, PlugIn{
 					        	((Choice)cps[i]).add("No Projects");
 					        	((Choice)cps[i+2]).removeAll();
 					        	((Choice)cps[i+2]).add("No Datasets");
+					        	prevpchoice=pchoice;
+					        	prevgchoice=gchoice;
+					    		prevuchoice=uchoice;
 					        	noprojects=true;
 					        	return false;
 					        }
@@ -917,7 +929,7 @@ public class getOmeroDatasetAndAttachData implements DialogListener, PlugIn{
 						
 					}
 				break;
-				case 6:
+				case 6://this is the string dataset in the display, cannot change
 				break;
 				case 7:
 					cps[i].setSize(180,10);
@@ -978,6 +990,13 @@ public class getOmeroDatasetAndAttachData implements DialogListener, PlugIn{
 		prevuchoice=uchoice;
 		return true;
 	}
+    
+    /**
+     * 
+     * @param rois array of rois to attach
+     * @param target data object target
+     * @param name the name of the object
+     */
 	protected void attachRoisToImage(Roi[] rois, DataObject target, String name) {
        	Collection<ROIData> roiList = roiArrayToCollection(rois);
        	try {
@@ -992,7 +1011,11 @@ public class getOmeroDatasetAndAttachData implements DialogListener, PlugIn{
        	}
     }
 	
-	
+	/**
+	 * turns roi[] into collection of ROIData
+	 * @param rois the roi [] to convert
+	 * @return the converted roi array as collection of ROIData
+	 */
 	public Collection<ROIData> roiArrayToCollection(Roi[] rois){
 		/* we now have a ij.gui.Roi array which needs to be converted to a ROIData List
 		// a single ROIData contains a list of ShapeData which we can add
@@ -1021,7 +1044,14 @@ public class getOmeroDatasetAndAttachData implements DialogListener, PlugIn{
 		rds.add(rd);
 		return rds;
 	}
-	
+	/**
+	 * 
+	 * @param file the file to attach
+	 * @param description a description of the file
+	 * @param NAME_SPACE_TO_SET the name space of the filtype you want to attach
+	 * @param datatype the type of data to set the Mimetype
+	 * @param image the image to attach it to
+	 */
 	protected void attachFile(File file, String description, String NAME_SPACE_TO_SET, String datatype, ImageData image) {
 		int INC = 262144;
 		try {
@@ -1098,6 +1128,10 @@ public class getOmeroDatasetAndAttachData implements DialogListener, PlugIn{
 	}
 // used for testing when running the plugin stand alone
     //public static void run main(String[] args) {
+	
+	/**
+	 * to run the plugin alone, used for testing purposes
+	 */
 	public void run (String args) {
     	//ImageJ imageJ = new ImageJ();
     	/*ImagePlus imp = IJ.openImage("http://imagej.nih.gov/ij/images/blobs.gif");

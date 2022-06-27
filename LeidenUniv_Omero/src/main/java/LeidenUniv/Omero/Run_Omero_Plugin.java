@@ -29,6 +29,10 @@ import LeidenUniv.Fish.*;
 public class Run_Omero_Plugin implements PlugIn, DialogListener {
 	private String[][] plugins;
 	private int prevFchoice=0,Fchoice=0;
+	
+	/**
+	 * Runs the plugin
+	 */
     public void run(String args) {
         //gets omero plugins and lets you choose
  		ImageJ imageJ = IJ.getInstance();
@@ -117,7 +121,7 @@ public class Run_Omero_Plugin implements PlugIn, DialogListener {
 	                IJ.log("Loading image "+counter+" of "+images.size());
 	                // here we load all single images, can be too much data
 	                try {
-	                	ImagePlus timp = om.openImagePlus(data.getId(), data, data.getGroupId());
+	                	ImagePlus timp = om.openImagePlus(data.getId(), data.getGroupId());
 		                ResultsTable rt2 = getImageData.getSingleImageResultsTable(timp, meas);
 		                rt2.addResults();
 	                } catch (Exception e) {
@@ -177,7 +181,7 @@ public class Run_Omero_Plugin implements PlugIn, DialogListener {
 	                IJ.log("Loading image "+counter+" of "+images.size());
 	                // here we load all single images, can be too much data
 	                try {
-	                	ImagePlus timp = om.openImagePlus(data.getId(), data, data.getGroupId());
+	                	ImagePlus timp = om.openImagePlus(data.getId(), data.getGroupId());
 	                	Pixel_counter_FIJI_v2 pc = new Pixel_counter_FIJI_v2();
 		                ResultsTable rt2 = pc.getOmeroData(timp,Channel);
 		                //rt2.show("returned data");
@@ -248,7 +252,7 @@ public class Run_Omero_Plugin implements PlugIn, DialogListener {
 	                IJ.log("Loading image "+counter+" of "+images.size());
 	                // here we load all single images, can be too much data
 	                try {
-	                	ImagePlus timp = om.openImagePlus(data.getId(), data, data.getGroupId());
+	                	ImagePlus timp = om.openImagePlus(data.getId(), data.getGroupId());
 	                	NeighbourhoodLocalizationAnalysis nla = new NeighbourhoodLocalizationAnalysis();
 	                	ResultsTable [] rts = nla.getNeighbourhoodLocalizationAnalysis(timp, fC, dC, MinObjSize, RimSize, thmi);
 		                om.attachDataToImage(rts[1], 2,data, "details");
@@ -299,7 +303,7 @@ public class Run_Omero_Plugin implements PlugIn, DialogListener {
             		ImageData data = image.next();
             		setLogWindowSizeAndLocation();
             		try {
-	                	ImagePlus timp = om.openImagePlus(data.getId(), data, data.getGroupId());
+	                	ImagePlus timp = om.openImagePlus(data.getId(), data.getGroupId());
 	                	ResultsTable [] rts = PI_Hoechst_Measurements.getOmeroData(timp,hch,pch,rsize,prom,pLimit,hLimit);
 		                om.attachDataToImage(rts[0], 0,data, "details");
 		                dataSet.incrementCounter();
@@ -385,7 +389,10 @@ public class Run_Omero_Plugin implements PlugIn, DialogListener {
 			IJ.showMessage("not implemented yet");
 		}
     }
-    
+    /**
+     * for testing purposes
+     * @param args not used
+     */
     public static void main (String[] args) {
     	//ImageJ imageJ = new ImageJ();
     	//imageJ.getInfo();
@@ -417,7 +424,9 @@ public class Run_Omero_Plugin implements PlugIn, DialogListener {
     	
     	
     }
-    
+    /**
+     * sets the location and size of the logwindow to 1/4th of the width, and 1/2 of the height of the screen, left top
+     */
     public void setLogWindowSizeAndLocation() {
     	Window logwindow =WindowManager.getWindow("Log");
         Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
@@ -428,7 +437,10 @@ public class Run_Omero_Plugin implements PlugIn, DialogListener {
         logwindow.toFront();
     }
 
-	@Override
+	/**
+	 * Reacts to a change in the selection folder to show the subplugins
+	 */
+    @Override
 	public boolean dialogItemChanged(GenericDialog dlog, AWTEvent arg1) {
 		// TODO Auto-generated method stub
 		Component [] cps =dlog.getComponents();
