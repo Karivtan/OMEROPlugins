@@ -60,7 +60,6 @@ import net.imagej.omero.DefaultOMEROService;
 import net.imagej.omero.OMEROLocation;
 import net.imagej.omero.OMEROService;
 import net.imagej.omero.OMEROSession;
-import net.imagej.patcher.LegacyInjector;
 import net.imagej.Dataset;
 import net.imagej.ImageJ;
 import net.imagej.ImgPlus;
@@ -90,7 +89,7 @@ import omero.log.NullLogger;
 import omero.log.SimpleLogger;
 import io.scif.config.SCIFIOConfig;
 import io.scif.config.SCIFIOConfig.ImgMode;
-import io.scif.io.Location;
+
 import io.scif.services.DatasetIOService;
 import io.scif.services.DefaultDatasetIOService;
 import org.scijava.Context;

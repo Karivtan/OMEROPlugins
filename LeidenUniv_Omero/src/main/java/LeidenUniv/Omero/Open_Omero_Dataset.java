@@ -117,8 +117,8 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
         throws Exception
     {
         OMEROLocation ol = new OMEROLocation(HOST,PORT,Username,Password);
-		ImageJ ij = new ImageJ();
-		Context context = ij.context();
+		net.imagej.ImageJ ij = new net.imagej.ImageJ();
+		Context context =ij.context();
 		OMEROService dos = context.service(OMEROService.class);
 		OMEROSession os = dos.createSession(ol);
 		client cl = os.getClient();
@@ -494,9 +494,9 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
 	                Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
 					int width = (int)screenSize.getWidth();
 					int height = (int)screenSize.getHeight();
-	                logwindow.setSize(width/4, height/2);
-	                logwindow.setLocation(0, 0);
-	                logwindow.toFront();
+	                //logwindow.setSize(width/4, height/2);
+	                //logwindow.setLocation(0, 0);
+	                //logwindow.toFront();
 	                IJ.log("Loading image "+counter+" of "+images.size());
 	                ImagePlus timp = openImagePlus(data.getId(), data);
 	                imps.add(timp);

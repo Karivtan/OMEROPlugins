@@ -104,7 +104,12 @@
 			<version>17.0.0</version>
 			<type>pom</type>
 		</dependency>
-
+		<dependency>
+			<groupId>repository.io.scif</groupId>
+			<artifactId>scifio</artifactId>
+			<version>0.37.3</version>
+			<scope>provided</scope>
+		</dependency>
 	</dependencies>
 		
 </project>
