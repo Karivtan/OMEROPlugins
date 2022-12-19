@@ -55,7 +55,6 @@ import loci.plugins.in.ImporterOptions;
 import loci.plugins.in.ImporterPrompter;
 import loci.plugins.util.WindowTools;
 import net.imagej.omero.*;
-import net.imagej.Dataset;
 import net.imagej.ImageJ;
 import net.imagej.ImgPlus;
 import omero.gateway.Gateway;
