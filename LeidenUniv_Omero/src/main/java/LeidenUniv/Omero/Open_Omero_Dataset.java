@@ -100,9 +100,8 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
 	private int prevgchoice, prevpchoice,schoice, prevuchoice, suchoice;
 	private Collection<ProjectData> pjd=null;
 	long [] dataSetIds=null;
-	private long dataChoice, cUid;
+	private long cUid;
 	private Gateway gateway = null;
-	private Dataset d;
 	private Object[] dsda;
 	private Object[] groupsetarray;
     /**
@@ -459,7 +458,6 @@ public class Open_Omero_Dataset implements PlugIn, DialogListener{
         String sString = SortedSets[schoice];
         suchoice = Arrays.asList(sets).indexOf(sString);
         List<Long> ids = Arrays.asList(dataSetIds[suchoice]); //this is based on the dataset value, also indexoutofbounds
-        dataChoice=dataSetIds[suchoice];
         @SuppressWarnings({ "unchecked", "rawtypes" })
 		Collection<Long> idc =(Collection)ids;
         Collection<ImageData> images = browser.getImagesForDatasets(ctx, idc);
